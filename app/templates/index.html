@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Генерация карточки товара</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #efe8dc;
+      --paper: #fbf7f1;
+      --ink: #1d1914;
+      --muted: #6d645a;
+      --line: #ddd3c4;
+      --accent: #0d5c4d;
+      --accent-ink: #f4fbf8;
+      --warn: #f4e2c4;
+      --warn-ink: #6b4a12;
+      --danger: #f6e4dc;
+      --danger-ink: #7a2e1e;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 16px/1.45 "Segoe UI", "Helvetica Neue", sans-serif;
+    }
+    header, main { width: min(1120px, calc(100% - 32px)); margin: 0 auto; }
+    header { padding: 28px 0 8px; }
+    .title-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    h1 { margin: 0; font: 600 32px/1.15 Georgia, "Times New Roman", serif; }
+    .help { position: relative; }
+    .help-toggle {
+      width: 32px;
+      height: 32px;
+      padding: 0;
+      border-radius: 50%;
+      background: transparent;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      font-weight: 600;
+    }
+    .help-toggle:hover, .help.open .help-toggle { background: var(--accent); color: var(--accent-ink); }
+    .help-pop {
+      position: absolute;
+      top: calc(100% + 10px);
+      left: 0;
+      z-index: 10;
+      width: min(420px, calc(100vw - 32px));
+      padding: 14px 16px;
+      background: var(--ink);
+      color: #f6f1e8;
+      border-radius: 12px;
+      box-shadow: 0 12px 32px rgba(29, 25, 20, 0.25);
+      font-size: 14px;
+      line-height: 1.5;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(-4px);
+      transition: opacity 0.15s, transform 0.15s, visibility 0.15s;
+    }
+    .help-pop::before {
+      content: "";
+      position: absolute;
+      top: -6px;
+      left: var(--arrow, 11px);
+      width: 12px;
+      height: 12px;
+      background: var(--ink);
+      transform: rotate(45deg);
+    }
+    .help-pop { pointer-events: none; }
+    .help.open .help-pop { cursor: pointer; pointer-events: auto; }
+    @media (hover: hover) {
+      .help:hover .help-pop { opacity: 1; visibility: visible; transform: none; }
+    }
+    .help.open .help-pop {
+      opacity: 1;
+      visibility: visible;
+      transform: none;
+    }
+    .help-pop strong { display: block; margin-bottom: 6px; }
+    .help-pop ol { margin: 0 0 10px; padding-left: 18px; }
+    .help-pop p { margin: 0; color: #d8cfc0; }
+    button.copied { background: #1f7a4a; color: #fff; border-color: #1f7a4a; }
+    button.copy-failed { background: var(--danger); color: var(--danger-ink); border-color: var(--danger-ink); }
+    button.copied, button.copy-failed { transition: background 0.2s, color 0.2s; }
+    main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; padding: 20px 0 40px; }
+    section {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 18px;
+    }
+    h2 { margin: 0 0 12px; font: 600 18px/1.2 Georgia, "Times New Roman", serif; }
+    label { display: block; margin: 12px 0 4px; font-size: 13px; color: var(--muted); }
+    input, textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--ink);
+      font: inherit;
+      padding: 8px 10px;
+    }
+    textarea { min-height: 88px; resize: vertical; }
+    textarea.autosize { overflow-y: hidden; max-height: 600px; }
+    textarea.autosize.scrolling { overflow-y: auto; }
+    #json { font: 13px/1.45 Consolas, "Courier New", monospace; }
+    .specs { display: grid; gap: 8px; margin-top: 8px; }
+    .spec-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; }
+    button, .ghost {
+      border: 0;
+      border-radius: 999px;
+      padding: 8px 14px;
+      font: inherit;
+      cursor: pointer;
+    }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    button { background: var(--accent); color: var(--accent-ink); }
+    .ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .danger, .warn, .note {
+      border-radius: 12px;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+    }
+    .danger { background: var(--danger); color: var(--danger-ink); }
+    .warn { background: var(--warn); color: var(--warn-ink); }
+    .ok { background: #e3f1e8; color: #1f5a37; border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; }
+    .note { background: #e7eef2; color: #24343c; }
+    .note li { white-space: pre-line; margin-bottom: 8px; }
+    .notes-intro { margin: 8px 0 0; font-size: 14px; }
+    .removed summary {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      cursor: pointer;
+      list-style: none;
+      font-weight: 600;
+    }
+    .removed summary::-webkit-details-marker { display: none; }
+    .removed-why { font-weight: 400; font-size: 13px; color: #4a6470; white-space: nowrap; }
+    .removed-why::after { content: " ▸"; }
+    .removed[open] .removed-why::after { content: " ▾"; }
+    .meta { color: var(--muted); font-size: 13px; margin: 0 0 8px; }
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px;
+      min-height: 120px;
+      margin: 0 0 12px;
+    }
+    .output {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+      margin-bottom: 10px;
+    }
+    .output summary {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      padding: 10px 12px;
+      cursor: pointer;
+      list-style: none;
+    }
+    .output summary::-webkit-details-marker { display: none; }
+    .output summary::before { content: "▸"; color: var(--accent); }
+    .output[open] summary::before { content: "▾"; }
+    .output-name { font-weight: 600; white-space: nowrap; }
+    .output-preview {
+      color: var(--muted);
+      font-size: 13px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+    }
+    .output-body { padding: 0 12px 12px; }
+    .output-body .row { margin: 0 0 8px; }
+    .output pre { max-height: 320px; overflow: auto; min-height: 0; margin: 0; }
+    .empty {
+      border: 1.5px dashed var(--line);
+      border-radius: 14px;
+      padding: 16px;
+    }
+    .empty-title { margin: 0 0 4px; font-weight: 600; }
+    .empty-lede { margin: 0 0 14px; color: var(--muted); font-size: 14px; }
+    .blueprint { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+    .blueprint li {
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+      padding: 10px 12px;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+    }
+    .blueprint .num {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #e3eee9;
+      color: var(--accent);
+      display: grid;
+      place-items: center;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .blueprint b { display: block; font-weight: 600; font-size: 15px; }
+    .blueprint span { color: var(--muted); font-size: 13px; }
+    .loading { border: 1px solid var(--line); border-radius: 14px; padding: 16px; background: #fff; }
+    .loading-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
+    .loading-head b { font-weight: 600; }
+    .loading-time { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+    .steps { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 6px; font-size: 14px; }
+    .steps li { display: flex; gap: 8px; align-items: center; color: var(--muted); }
+    .steps li::before {
+      content: "";
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      border: 2px solid var(--line);
+      flex: none;
+    }
+    .steps li.active { color: var(--ink); }
+    .steps li.active::before {
+      border-color: var(--accent);
+      border-right-color: transparent;
+      animation: spin 0.8s linear infinite;
+    }
+    .steps li.done { color: var(--accent); }
+    .steps li.done::before { content: "✓"; border: 0; width: 14px; text-align: center; font-size: 13px; line-height: 14px; }
+    .skeleton { display: grid; gap: 8px; }
+    .skeleton i {
+      display: block;
+      height: 12px;
+      border-radius: 6px;
+      background: linear-gradient(90deg, #efe8dc 0%, #f8f3ea 50%, #efe8dc 100%);
+      background-size: 200% 100%;
+      animation: shimmer 1.4s ease-in-out infinite;
+    }
+    .skeleton i.title { height: 18px; width: 70%; margin-bottom: 6px; }
+    .skeleton i.short { width: 45%; }
+    .skeleton i.mid { width: 80%; }
+    @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) {
+      .skeleton i { animation: none; }
+      .steps li.active::before { animation-duration: 1.6s; }
+    }
+    .json-block { margin-top: 22px; padding-top: 16px; border-top: 1px dashed var(--line); }
+    .json-block label { margin-top: 0; }
+    .json-status { margin: 6px 0 0; font-size: 13px; color: var(--danger-ink); }
+    .samples-label { margin: 0; }
+    .samples { margin-top: 6px; }
+    .error-title { display: block; font-weight: 600; margin-bottom: 4px; }
+    #json.has-error {
+      border-color: var(--danger-ink);
+      background: #fdf3ef;
+      box-shadow: 0 0 0 3px var(--danger);
+    }
+    .hidden { display: none; }
+    @media (max-width: 860px) {
+      main { grid-template-columns: minmax(0, 1fr); }
+      .spec-row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="title-row">
+      <h1>Генерация карточки товара</h1>
+      <div class="help" id="help">
+        <button type="button" class="help-toggle" id="help-toggle" aria-label="Как это работает" aria-describedby="help-pop">?</button>
+        <div class="help-pop" id="help-pop" role="tooltip">
+          <strong>Как это работает</strong>
+          <ol>
+            <li>Выберите пример или заполните данные прибора.</li>
+            <li>Нажмите «Собрать карточку».</li>
+            <li>Откройте нужный формат и скопируйте его.</li>
+          </ol>
+          <p>Характеристики берутся только из ваших данных. Чего нет во входе, будет помечено «данных нет» и попадёт в список «Что уточнить».</p>
+        </div>
+      </div>
+    </div>
+  </header>
+  <main>
+    <section>
+      <h2>Выберите наименование</h2>
+      <div class="row samples" id="sample-buttons"></div>
+      <label for="name">Название</label>
+      <input id="name" autocomplete="off">
+      <label for="manufacturer">Производитель</label>
+      <input id="manufacturer" autocomplete="off">
+      <label for="description">Описание или фрагмент паспорта</label>
+      <textarea id="description" class="autosize"></textarea>
+      <label>Характеристики</label>
+      <div class="specs" id="specs"></div>
+      <div class="row">
+        <button type="button" class="ghost" id="add-spec">Добавить характеристику</button>
+      </div>
+      <div class="json-block">
+        <label for="json">JSON, который уйдёт в сервис</label>
+      <textarea id="json" class="autosize" spellcheck="false" aria-describedby="json-status"></textarea>
+      <p id="json-status" class="json-status hidden" role="status"></p>
+      </div>
+      <div class="row">
+        <button type="button" id="submit">Собрать карточку</button>
+      </div>
+    </section>
+    <section>
+      <h2>Результат</h2>
+      <div id="error" class="danger hidden"></div>
+      <div id="gaps" class="warn hidden"></div>
+      <details id="removed" class="note removed hidden">
+        <summary><span id="removed-title"></span><span class="removed-why">подробнее</span></summary>
+        <p class="notes-intro" id="removed-intro"></p>
+        <ul id="removed-list"></ul>
+      </details>
+      <p id="counts" class="meta hidden"></p>
+      <div class="empty" id="placeholder">
+        <p class="empty-title">Здесь появится карточка</p>
+        <p class="empty-lede">Заполните данные слева или выберите пример, затем нажмите «Собрать карточку». Получится шесть блоков:</p>
+        <ol class="blueprint">
+          <li><span class="num">1</span><div><b>SEO-заголовок</b><span>до 70 символов</span></div></li>
+          <li><span class="num">2</span><div><b>SEO-описание</b><span>800–1200 символов, без выдуманных характеристик</span></div></li>
+          <li><span class="num">3</span><div><b>Характеристики</b><span>только из ваших данных, пустые — «данных нет»</span></div></li>
+          <li><span class="num">4</span><div><b>Поисковые запросы</b><span>3–5 запросов для продвижения страницы</span></div></li>
+          <li><span class="num">5</span><div><b>Блок для менеджера</b><span>кому подходит прибор и какие задачи решает</span></div></li>
+          <li><span class="num">6</span><div><b>Что уточнить</b><span>подсказка о пропусках, в копируемый текст не попадает</span></div></li>
+        </ol>
+      </div>
+      <div class="loading hidden" id="loading" aria-live="polite">
+        <div class="loading-head"><b>Собираем карточку</b><span class="loading-time" id="loading-time">0 с</span></div>
+        <ol class="steps" id="steps">
+          <li>Проверяем данные прибора</li>
+          <li>Модель пишет текст</li>
+          <li>Сверяем текст с вашими характеристиками</li>
+        </ol>
+        <div class="skeleton" aria-hidden="true">
+          <i class="title"></i><i></i><i class="mid"></i><i></i><i class="short"></i>
+        </div>
+      </div>
+      <details class="output hidden" id="out-text">
+        <summary><span class="output-name">Текст</span><span class="output-preview" id="preview-text"></span></summary>
+        <div class="output-body">
+          <div class="row"><button type="button" id="copy-text">Копировать текст</button></div>
+          <pre id="result-text"></pre>
+        </div>
+      </details>
+      <details class="output hidden" id="out-md">
+        <summary><span class="output-name">Markdown</span><span class="output-preview" id="preview-md"></span></summary>
+        <div class="output-body">
+          <div class="row"><button type="button" id="copy-md">Копировать Markdown</button></div>
+          <pre id="markdown"></pre>
+        </div>
+      </details>
+      <details class="output hidden" id="out-json">
+        <summary><span class="output-name">JSON</span><span class="output-preview" id="preview-json"></span></summary>
+        <div class="output-body">
+          <div class="row"><button type="button" id="copy-json">Копировать JSON</button></div>
+          <pre id="result-json"></pre>
+        </div>
+      </details>
+    </section>
+  </main>
+  <script id="sample-data" type="application/json">{{ samples_json | safe }}</script>
+  <script>
+    const samples = JSON.parse(document.getElementById("sample-data").textContent);
+    const specsNode = document.getElementById("specs");
+    const jsonNode = document.getElementById("json");
+    let card = null;
+    let writingJson = false;
+
+    function specRow(key, value) {
+      const row = document.createElement("div");
+      row.className = "spec-row";
+      const keyInput = document.createElement("input");
+      keyInput.placeholder = "Характеристика";
+      keyInput.title = "Например: класс точности, диапазон измерений";
+      keyInput.setAttribute("aria-label", "Название характеристики");
+      keyInput.value = key;
+      const valueInput = document.createElement("input");
+      valueInput.placeholder = "Введите значение";
+      valueInput.title = "Пустое поле попадёт в карточку как «данных нет»";
+      valueInput.setAttribute("aria-label", "Значение характеристики");
+      // null и строка из пробелов — это «данных нет», в поле не оставляем невидимый пробел
+      valueInput.value = value == null || !String(value).trim() ? "" : String(value);
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "ghost";
+      remove.textContent = "Убрать";
+      remove.addEventListener("click", () => {
+        row.remove();
+        if (!specsNode.children.length) specRow("", "");
+        syncJson();
+      });
+      for (const input of [keyInput, valueInput]) {
+        input.addEventListener("input", syncJson);
+        row.append(input);
+      }
+      row.append(remove);
+      specsNode.append(row);
+    }
+
+    function readProduct() {
+      const specs = {};
+      for (const row of specsNode.querySelectorAll(".spec-row")) {
+        const [keyInput, valueInput] = row.querySelectorAll("input");
+        const key = keyInput.value.trim();
+        if (key) specs[key] = valueInput.value;
+      }
+      return {
+        name: document.getElementById("name").value,
+        manufacturer: document.getElementById("manufacturer").value,
+        description: document.getElementById("description").value,
+        specs
+      };
+    }
+
+    function fillForm(product) {
+      document.getElementById("name").value = product.name || "";
+      document.getElementById("manufacturer").value = product.manufacturer || "";
+      document.getElementById("description").value = product.description || "";
+      autosize(document.getElementById("description"));
+      specsNode.replaceChildren();
+      const entries = Object.entries(product.specs || {});
+      if (!entries.length) entries.push(["", ""]);
+      for (const [key, value] of entries) specRow(key, value);
+    }
+
+    function autosize(node) {
+      node.style.height = "auto";
+      const limit = parseFloat(getComputedStyle(node).maxHeight) || Infinity;
+      const height = node.scrollHeight + 2;
+      node.style.height = Math.min(height, limit) + "px";
+      node.classList.toggle("scrolling", height > limit);
+    }
+
+    function syncJson() {
+      if (writingJson) return;
+      writingJson = true;
+      jsonNode.value = JSON.stringify(readProduct(), null, 2);
+      autosize(jsonNode);
+      writingJson = false;
+      showJsonStatus(null);
+    }
+
+    function applyJson() {
+      let product;
+      try {
+        product = JSON.parse(jsonNode.value);
+      } catch (_error) {
+        return "syntax";
+      }
+      if (!product || typeof product !== "object" || Array.isArray(product)) return "shape";
+      writingJson = true;
+      fillForm(product);
+      writingJson = false;
+      return null;
+    }
+
+    const JSON_PROBLEMS = {
+      syntax: "JSON с ошибкой — поля слева не обновляются. Исправьте JSON или начните править поля: тогда JSON соберётся из них заново.",
+      shape: "Нужен JSON-объект в фигурных скобках { … } — поля слева не обновляются.",
+    };
+
+    function showJsonStatus(problem) {
+      const status = document.getElementById("json-status");
+      status.textContent = problem ? JSON_PROBLEMS[problem] : "";
+      status.classList.toggle("hidden", !problem);
+      jsonNode.classList.toggle("has-error", Boolean(problem));
+    }
+
+    function showError(message, { line = null, inputError = false } = {}) {
+      const node = document.getElementById("error");
+      node.replaceChildren();
+      const title = document.createElement("span");
+      title.className = "error-title";
+      title.textContent = "Карточка не собрана";
+      node.append(title, document.createTextNode(message));
+      if (inputError) {
+        const hint = document.createElement("div");
+        hint.className = "meta";
+        hint.style.margin = "6px 0 0";
+        hint.style.color = "inherit";
+        hint.textContent = line
+          ? "Строка с ошибкой выделена в поле JSON слева."
+          : "Проверьте поле JSON слева.";
+        node.append(hint);
+        markJson(line);
+      }
+      node.classList.remove("hidden");
+    }
+
+    function markJson(line) {
+      jsonNode.classList.add("has-error");
+      jsonNode.focus({ preventScroll: true });
+      if (line) {
+        const lines = jsonNode.value.split("\n");
+        const index = Math.min(Math.max(line, 1), lines.length) - 1;
+        const start = lines.slice(0, index).reduce((sum, item) => sum + item.length + 1, 0);
+        jsonNode.setSelectionRange(start, start + lines[index].length);
+      }
+      jsonNode.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+
+    function clearError() {
+      document.getElementById("error").classList.add("hidden");
+      const localProblem = !document.getElementById("json-status").classList.contains("hidden");
+      jsonNode.classList.toggle("has-error", localProblem);
+    }
+
+    function fillNotes(node, title, items, emptyText, { hideWhenEmpty = false, noteOnly = false } = {}) {
+      node.replaceChildren();
+      if (!items.length && hideWhenEmpty) {
+        node.classList.add("hidden");
+        return;
+      }
+      const heading = document.createElement("strong");
+      heading.textContent = title;
+      node.append(heading);
+      const list = document.createElement("ul");
+      if (!items.length) {
+        const item = document.createElement("li");
+        item.textContent = emptyText;
+        list.append(item);
+      }
+      for (const gap of items) {
+        const item = document.createElement("li");
+        item.textContent = noteOnly ? gap.note : gap.field + ": " + gap.note;
+        list.append(item);
+      }
+      node.append(list);
+      node.classList.remove("hidden");
+    }
+
+    const REMOVED_INTRO =
+      "Нейросеть дописала эти фразы сама, в данных о приборе их нет. " +
+      "Если утверждение верное, верните его в текст вручную.";
+
+    function phrases(count) {
+      const tens = count % 100;
+      const ones = count % 10;
+      if (tens >= 11 && tens <= 14) return count + " фраз";
+      if (ones === 1) return count + " фраза";
+      if (ones >= 2 && ones <= 4) return count + " фразы";
+      return count + " фраз";
+    }
+
+    function showRemoved(items) {
+      const node = document.getElementById("removed");
+      node.open = false;
+      node.classList.toggle("hidden", !items.length);
+      if (!items.length) return;
+      document.getElementById("removed-title").textContent =
+        "Убрано из текста модели: " + phrases(items.length);
+      document.getElementById("removed-intro").textContent = REMOVED_INTRO;
+      const list = document.getElementById("removed-list");
+      list.replaceChildren(...items.map((gap) => {
+        const item = document.createElement("li");
+        item.textContent = gap.note;
+        return item;
+      }));
+    }
+
+    function showCard(next) {
+      card = next;
+      clearError();
+      const missing = next.gaps.filter((gap) => gap.kind !== "removed");
+      const gapsNode = document.getElementById("gaps");
+      gapsNode.classList.toggle("ok", !missing.length);
+      gapsNode.classList.toggle("warn", Boolean(missing.length));
+      if (missing.length) {
+        fillNotes(gapsNode, "Что уточнить перед публикацией", missing, "");
+      } else {
+        gapsNode.replaceChildren();
+        const title = document.createElement("strong");
+        title.textContent = "✓ Все поля заполнены";
+        gapsNode.append(title);
+        gapsNode.classList.remove("hidden");
+      }
+      showRemoved(next.gaps.filter((gap) => gap.kind === "removed"));
+      const counts = document.getElementById("counts");
+      counts.textContent = "Заголовок: " + next.seo_title.length + " символов. Описание: " + next.seo_description.length + " символов.";
+      counts.classList.remove("hidden");
+      document.getElementById("placeholder").classList.add("hidden");
+      const text = plainText(next);
+      const json = JSON.stringify(next, null, 2);
+      fillOutput("text", "result-text", text, next.seo_title);
+      fillOutput("md", "markdown", next.markdown, next.seo_title);
+      fillOutput("json", "result-json", json, Object.keys(next).join(", "));
+    }
+
+    function fillOutput(key, preId, content, preview) {
+      document.getElementById(preId).textContent = content;
+      document.getElementById("preview-" + key).textContent = preview;
+      document.getElementById("out-" + key).classList.remove("hidden");
+    }
+
+    function plainText(next) {
+      const sections = [
+        ["SEO-ЗАГОЛОВОК", [next.seo_title]],
+        ["SEO-ОПИСАНИЕ", [next.seo_description]],
+        ["ХАРАКТЕРИСТИКИ", next.specs.map((spec) => "— " + spec.name + ": " + spec.value)],
+        ["ПОИСКОВЫЕ ЗАПРОСЫ", next.search_queries.map((query, index) => (index + 1) + ". " + query)],
+        ["БЛОК ДЛЯ МЕНЕДЖЕРА", [next.commercial_block]],
+      ];
+      return sections.map(([title, lines]) => [title, ...lines].join("\n")).join("\n\n");
+    }
+
+    async function copy(text, button) {
+      if (!button.dataset.label) button.dataset.label = button.textContent;
+      clearTimeout(Number(button.dataset.timer));
+      button.classList.remove("copied", "copy-failed");
+      try {
+        await navigator.clipboard.writeText(text);
+        button.textContent = "✓ Скопировано";
+        button.classList.add("copied");
+      } catch (_error) {
+        button.textContent = "✕ Не удалось скопировать";
+        button.classList.add("copy-failed");
+      }
+      button.dataset.timer = String(setTimeout(() => {
+        button.textContent = button.dataset.label;
+        button.classList.remove("copied", "copy-failed");
+      }, 1600));
+    }
+
+    const help = document.getElementById("help");
+    const helpPop = document.getElementById("help-pop");
+
+    function placeHelp() {
+      helpPop.style.left = "0px";
+      const box = help.getBoundingClientRect();
+      const room = window.innerWidth - 16 - box.left;
+      const shift = Math.min(0, room - helpPop.offsetWidth);
+      helpPop.style.left = shift + "px";
+      helpPop.style.setProperty("--arrow", (11 - shift) + "px");
+    }
+
+    placeHelp();
+    help.addEventListener("mouseenter", placeHelp);
+    window.addEventListener("resize", placeHelp);
+    document.getElementById("help-toggle").addEventListener("click", (event) => {
+      event.stopPropagation();
+      placeHelp();
+      help.classList.toggle("open");
+    });
+    document.addEventListener("click", (event) => {
+      if (!help.contains(event.target) || helpPop.contains(event.target)) help.classList.remove("open");
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") help.classList.remove("open");
+    });
+
+    document.getElementById("add-spec").addEventListener("click", () => specRow("", ""));
+    for (const fieldId of ["name", "manufacturer", "description"]) {
+      document.getElementById(fieldId).addEventListener("input", syncJson);
+    }
+    let jsonCheckTimer = null;
+    jsonNode.addEventListener("input", () => {
+      autosize(jsonNode);
+      clearTimeout(jsonCheckTimer);
+      const problem = applyJson();
+      if (!problem) {
+        showJsonStatus(null);
+        return;
+      }
+      jsonNode.classList.remove("has-error");
+      jsonCheckTimer = setTimeout(() => showJsonStatus(applyJson()), 600);
+    });
+    document.getElementById("description").addEventListener("input", (event) => autosize(event.currentTarget));
+    window.addEventListener("resize", () => {
+      autosize(jsonNode);
+      autosize(document.getElementById("description"));
+    });
+    document.getElementById("copy-text").addEventListener("click", (event) => {
+      if (card) copy(plainText(card), event.currentTarget);
+    });
+    document.getElementById("copy-md").addEventListener("click", (event) => {
+      if (card) copy(card.markdown, event.currentTarget);
+    });
+    document.getElementById("copy-json").addEventListener("click", (event) => {
+      if (card) copy(JSON.stringify(card, null, 2), event.currentTarget);
+    });
+
+    const sampleButtons = document.getElementById("sample-buttons");
+    for (const sample of samples) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "ghost";
+      button.textContent = sample.label;
+      button.addEventListener("click", () => {
+        clearError();
+        writingJson = true;
+        jsonNode.value = JSON.stringify(sample.payload, null, 2);
+        autosize(jsonNode);
+        applyJson();
+        writingJson = false;
+        showJsonStatus(null);
+      });
+      sampleButtons.append(button);
+    }
+
+    const brokenButton = document.createElement("button");
+    brokenButton.type = "button";
+    brokenButton.className = "ghost";
+    brokenButton.textContent = "Некорректный JSON";
+    brokenButton.title = "Подставить обрезанный JSON и посмотреть, как сервис объясняет ошибку";
+    brokenButton.addEventListener("click", () => {
+      clearError();
+      jsonNode.value = '{\n  "name": "Манометр показывающий DM 02",\n  "specs": {\n    "диапазон измерений": "0–1,6 МПа",\n';
+      autosize(jsonNode);
+      showJsonStatus(applyJson());
+      jsonNode.focus();
+    });
+    sampleButtons.append(brokenButton);
+
+    const loadingNode = document.getElementById("loading");
+    const stepNodes = [...document.querySelectorAll("#steps li")];
+    let loadingTimer = null;
+
+    function setStep(active) {
+      stepNodes.forEach((node, index) => {
+        node.classList.toggle("done", index < active);
+        node.classList.toggle("active", index === active);
+      });
+    }
+
+    function startLoading() {
+      for (const id of ["gaps", "removed", "counts", "placeholder", "out-text", "out-md", "out-json"]) {
+        document.getElementById(id).classList.add("hidden");
+      }
+      loadingNode.classList.remove("hidden");
+      const started = Date.now();
+      setStep(0);
+      const time = document.getElementById("loading-time");
+      time.textContent = "0 с";
+      loadingTimer = setInterval(() => {
+        const seconds = Math.floor((Date.now() - started) / 1000);
+        time.textContent = seconds + " с";
+        setStep(seconds < 1 ? 0 : seconds < 15 ? 1 : 2);
+      }, 250);
+    }
+
+    function stopLoading() {
+      clearInterval(loadingTimer);
+      loadingNode.classList.add("hidden");
+    }
+
+    function restoreResult() {
+      if (card) showCard(card);
+      else document.getElementById("placeholder").classList.remove("hidden");
+    }
+
+    document.getElementById("submit").addEventListener("click", async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      button.textContent = "Собираем…";
+      clearError();
+      startLoading();
+      try {
+        const response = await fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: jsonNode.value
+        });
+        const payload = await response.json();
+        stopLoading();
+        if (!response.ok) {
+          restoreResult();
+          showError(payload.error || "Карточка не собрана.", {
+            line: payload.line,
+            inputError: response.status === 400,
+          });
+          return;
+        }
+        showCard(payload);
+      } catch (_error) {
+        stopLoading();
+        restoreResult();
+        showError("Сервис не ответил. Карточка не собрана.");
+      } finally {
+        button.disabled = false;
+        button.textContent = "Собрать карточку";
+      }
+    });
+
+    specRow("", "");
+    syncJson();
+  </script>
+</body>
+</html>
